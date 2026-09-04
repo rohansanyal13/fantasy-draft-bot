@@ -83,16 +83,16 @@ def main() -> None:
 
     with col_available:
         st.subheader("Available players")
-        st.dataframe(_players_dataframe(view.available_players), use_container_width=True, hide_index=True)
+        st.dataframe(_players_dataframe(view.available_players), width="stretch", hide_index=True)
 
     with col_rosters:
         st.subheader("Your roster")
-        st.dataframe(_roster_summary(view.user_roster), use_container_width=True, hide_index=True)
+        st.dataframe(_roster_summary(view.user_roster), width="stretch", hide_index=True)
 
         st.subheader("Opponents")
         for opp in view.opponent_rosters:
             with st.expander(f"Roster {opp.roster_id}"):
-                st.dataframe(_roster_summary(opp), use_container_width=True, hide_index=True)
+                st.dataframe(_roster_summary(opp), width="stretch", hide_index=True)
 
 
 if __name__ == "__main__":
