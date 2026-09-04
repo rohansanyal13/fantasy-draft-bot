@@ -31,15 +31,16 @@ def _scoring_format_param(scoring: ScoringSettings) -> str:
     return "STD"
 
 
-class FantasyProsClient:
-    """Live FantasyPros projections, with an on-disk cache as fallback.
+# Confirmed against a live response: GET /nfl/{season}/projections?position=QB&week=draft&scoring=PPR
+# returns {"players": [{"name", "team_id", "position_id", "stats": {"points", "points_ppr",
+# "points_half", ...}, ...}]} — the scoring query param does not change which stats fields are
+# present, all three point totals are always returned; the caller picks the one matching the
+# league's actual format.
+_SCORING_STATS_FIELD = {"PPR": "points_ppr", "HALF": "points_half", "STD": "points"}
 
-    NOTE: the exact query parameter names/values and response field names below
-    were assembled from FantasyPros' public docs and third-party references, not
-    a live authenticated test call — verify against a real response the first time
-    this runs (see the ValueError raised in `_extract_rows` if the shape doesn't
-    match) and adjust `_extract_rows` accordingly.
-    """
+
+class FantasyProsClient:
+    """Live FantasyPros projections, with an on-disk cache as fallback."""
 
     def __init__(self, api_key: str, cache_path: Path, http: httpx.AsyncClient | None = None) -> None:
         self._api_key = api_key
@@ -79,21 +80,23 @@ class FantasyProsClient:
                 params={"position": position.value, "week": "draft", "scoring": scoring_param},
             )
             resp.raise_for_status()
-            rows.extend(self._extract_rows(resp.json(), position))
+            rows.extend(self._extract_rows(resp.json(), position, scoring_param))
         return rows
 
     @staticmethod
-    def _extract_rows(payload: dict, position: Position) -> list[ProjectionRow]:
+    def _extract_rows(payload: dict, position: Position, scoring_param: str) -> list[ProjectionRow]:
         players = payload.get("players")
         if players is None:
             raise ValueError(
                 f"Unexpected FantasyPros response shape (no 'players' key): {list(payload.keys())!r}"
             )
+        points_field = _SCORING_STATS_FIELD.get(scoring_param, "points")
         rows = []
         for p in players:
-            name = p.get("player_name") or p.get("name")
-            team = p.get("player_team_id") or p.get("team")
-            points = p.get("fpts") or p.get("stats", {}).get("fpts") if isinstance(p.get("stats"), dict) else None
+            name = p.get("name")
+            team = p.get("team_id")
+            stats = p.get("stats") or {}
+            points = stats.get(points_field, stats.get("points"))
             if name is None or points is None:
                 raise ValueError(
                     f"Unexpected FantasyPros player record shape, could not find name/points: {p!r}"
